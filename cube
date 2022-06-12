@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <title>Babylon.js sample code</title>
+
+        <!-- Babylon.js -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
+        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
+        <script src="https://preview.babylonjs.com/ammo.js"></script>
+        <script src="https://preview.babylonjs.com/cannon.js"></script>
+        <script src="https://preview.babylonjs.com/Oimo.js"></script>
+        <script src="https://preview.babylonjs.com/earcut.min.js"></script>
+        <script src="https://preview.babylonjs.com/babylon.js"></script>
+        <script src="https://preview.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        <script src="https://preview.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+        <script src="https://preview.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+        <script src="https://preview.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+        <script src="https://preview.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+        <script src="https://preview.babylonjs.com/gui/babylon.gui.min.js"></script>
+        <script src="https://preview.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+
+        <style>
+        html, body {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        .chrinput {
+            width: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div style="position: absolute; z-index: 100;left:0px; top: 0px; background:#fff">
+        <table>
+            <tr><td>上：<input type="text" class="chrinput" id="plat4" value="上" /></td><td>下：<input type="text" class="chrinput" id="plat5" value="下" /></td></tr>
+            <tr><td>左：<input type="text" class="chrinput" id="plat3" value="左" /></td><td>右：<input type="text" class="chrinput" id="plat2" value="右" /></td></tr>
+            <tr><td>前：<input type="text" class="chrinput" id="plat1" value="前" /></td><td>后：<input type="text" class="chrinput" id="plat0" value="后" /></td></tr>
+            <tr><td colspan="2"><button onclick="changechr()">变换</button><button onclick="changemodel('231')">231模型</button><button onclick="changemodel('222')">222模型</button><button onclick="changemodel('141')">141模型</button></td></tr>
+            <tr><td colspan="2"><button onclick="changemodel('33')">33模型</button><button onclick="changemodel('141')">141模型</button><button onclick="changemodel('1113')">1113模型</button></td></tr>
+        </table>
+    </div>
+    <div style="position:absolute;left:0px;top:0px;z-index:1;width:100%;height:100%"><canvas id="renderCanvas"></canvas></div>
+
+    <script>
+        var canvas = document.getElementById("renderCanvas");
+
+        var startRenderLoop = function (engine, canvas) {
+            engine.runRenderLoop(function () {
+                if (sceneToRender && sceneToRender.activeCamera) {
+                    sceneToRender.render();
+                }
+            });
+        }
+
+        var engine = null;
+        var scene = null;
+        var sceneToRender = null;
+        var createDefaultEngine = function () { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, disableWebGL2Support: false }); };
+        let animation = [], cubeplat = [], explode = 1, moveStatus = [], singleMove = [], singleMoveBack = []
+        const asm = function (index, origin, rotateAxis, fromA, toA, step) {
+            this.index = index
+            this.origin = origin
+            this.rotateAxis = rotateAxis
+            this.fromA = fromA
+            this.toA = toA
+            this.step = step
+            this.count = 0
+        }
+        const actm = function (index, status) {
+            this.index = index
+            this.status = status
+        }
+        function changemodel(key) {
+            cubeplat.forEach(function (v, i) {
+                cubeplat[i].dispose()
+            })
+            animation=[]
+            eval('cube' + key + '()')
+            explode = 1
+        }
+        var createScene = function () {
+            // This creates a basic Babylon Scene object (non-mesh)
+            var scene = new BABYLON.Scene(engine);
+
+            // This creates and positions a free camera (non-mesh)
+            //var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
+            var camera = new BABYLON.ArcRotateCamera("camera",
+                BABYLON.Tools.ToRadians(-40), BABYLON.Tools.ToRadians(70), 10, BABYLON.Vector3.Zero(), scene);
+
+            // This targets the camera to scene origin
+            camera.setTarget(BABYLON.Vector3.Zero());
+
+            // This attaches the camera to the canvas
+            camera.attachControl(canvas, true);
+
+            // This creates a light, aiming 0,1,0 - to the sky (non-mesh)
+            var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+            var light2 = new BABYLON.HemisphericLight("light2", new BABYLON.Vector3(0, -1, 0), scene);
+            // Default intensity is 1. Let's dim the light a small amount
+            light.intensity = 0.8;
+            light2.intensity = 0.4;
+
+            cube1113free(scene)
+
+            scene.registerBeforeRender(function () {
+                if (animation.length > 0) {
+                    let obj = animation[0], plat = cubeplat[obj.index]
+                    
+                    if (obj.count == 0) {
+                        console.log(obj)
+                        plat.setPivotPoint(obj.origin, BABYLON.Space.LOCAL)
+                    }
+                    obj.count++
+                    let t = obj.fromA + obj.step
+                    if (obj.rotateAxis == 'x') {
+                        if (t / obj.toA > 1) {
+                            t = obj.toA - obj.fromA
+                            plat.addRotation(BABYLON.Tools.ToRadians(t), 0, 0)
+                            obj.fromA = obj.toA
+                            animation.splice(0, 1)
+                        } else {
+                            plat.addRotation(BABYLON.Tools.ToRadians(obj.step), 0, 0)
+                            obj.fromA = t
+                        }
+                    }
+                    if (obj.rotateAxis == 'y') {
+                        if (t / obj.toA > 1) {
+                            t = obj.toA - obj.fromA
+                            plat.addRotation(0, BABYLON.Tools.ToRadians(t), 0)
+                            obj.fromA = obj.toA
+                            animation.splice(0, 1)
+                        } else {
+                            plat.addRotation(0, BABYLON.Tools.ToRadians(obj.step), 0)
+                            obj.fromA = t
+                        }
+                    }
+                    if (obj.rotateAxis == 'z') {
+                        if (t / obj.toA > 1) {
+                            t = obj.toA - obj.fromA
+                            plat.addRotation(0, 0, BABYLON.Tools.ToRadians(t))
+                            obj.fromA = obj.toA
+                            animation.splice(0, 1)
+                        } else {
+                            plat.addRotation(0, 0, BABYLON.Tools.ToRadians(obj.step))
+                            obj.fromA = t
+                        }
+                    }
+
+
+                }
+
+            })
+
+            showAxis(10, scene)
+            return scene;
+        };
+        function exp1113free(i) {
+            return new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickUpTrigger,
+                function () {
+                    if (animation.length > 0) return;
+
+                    if (moveStatus[i].status == 1) {
+                        moveStatus[i].status = 0
+                        let temp = singleMove.slice()
+                        let s = temp[i]
+                        s.count = 0
+                        s.fromA=0
+                        animation[0]=s
+                    } else {
+                        moveStatus[i].status = 1
+                        let temp = singleMoveBack.slice()
+                        let s = temp[i]
+                        s.count = 0
+                        s.fromA = 0
+                        animation[0]=s
+                    }
+
+                })
+        }
+        function cube1113free(scene) {
+            let boxes = [new BABYLON.Vector3(0, 1, 0), new BABYLON.Vector3(0, 0, -0.5),
+            new BABYLON.Vector3(1, 0, 0), new BABYLON.Vector3(-1, 0, 0),
+            new BABYLON.Vector3(0, 1, 0), new BABYLON.Vector3(0, 1, 0),]
+            let font = '140px fantasy'
+            for (let i = 0; i < 6; i++) {
+                cubeplat[i] = BABYLON.MeshBuilder.CreatePlane('plat' + i, { size: 1, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene)
+                cubeplat[i].position = boxes[i]
+                cubeplat[i].material = getTextMateral(document.getElementById('plat' + i).value, font, scene)
+                cubeplat[i].actionManager = new BABYLON.ActionManager(scene);
+                cubeplat[i].actionManager.registerAction(
+                    exp1113free(i)
+                )
+                moveStatus[i] = new actm(i,1)
+            }
+            cubeplat[2].parent = cubeplat[1]
+            cubeplat[3].parent = cubeplat[1]
+            cubeplat[4].parent = cubeplat[1]
+            cubeplat[0].parent = cubeplat[4]
+            cubeplat[5].parent = cubeplat[0]
+
+            singleMove[0] = new asm(0, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, 90, 1)
+            singleMove[1] = new asm(1, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, 0, 1)
+            singleMove[2] = new asm(2, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, -90, -1)
+            singleMove[3] = new asm(3, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, 90, 1)
+            singleMove[4] = new asm(4, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, 90, 1)
+            singleMove[5] = new asm(5, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, 90, 1)
+
+            singleMoveBack[0] = new asm(0, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, -90, -1)
+            singleMoveBack[1] = new asm(1, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, 0, 1)
+            singleMoveBack[2] = new asm(2, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, 90, 1)
+            singleMoveBack[3] = new asm(3, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, -90, -1)
+            singleMoveBack[4] = new asm(4, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, -90, -1)
+            singleMoveBack[5] = new asm(5, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, -90, -1)
+
+        }
+        function exp1113() {
+            return new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickUpTrigger,
+                function () {
+                    if (animation.length > 0) return;
+
+                    if (explode == 1) {
+                        explode = 0
+                        animation.push(new asm(2, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(3, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, 90, 1))
+                        animation.push(new asm(4, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, 90, 1))
+                        animation.push(new asm(0, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, 90, 1))
+                        animation.push(new asm(5, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, 90, 1))
+                    } else {
+                        explode = 1
+                        animation.push(new asm(5, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, -90, -1))
+                        animation.push(new asm(0, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, -90, -1))
+                        animation.push(new asm(4, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, -90, -1))
+                        animation.push(new asm(3, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(2, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, 90, 1))
+                    }
+
+                })
+        }
+        function cube1113(scene) {
+            let boxes = [new BABYLON.Vector3(0, 1, 0), new BABYLON.Vector3(0, 0, -0.5),
+            new BABYLON.Vector3(1, 0, 0), new BABYLON.Vector3(-1, 0, 0),
+            new BABYLON.Vector3(0, 1, 0), new BABYLON.Vector3(0, 1, 0),]
+            let font = '140px fantasy'
+
+            for (let i = 0; i < 6; i++) {
+                cubeplat[i] = BABYLON.MeshBuilder.CreatePlane('plat' + i, { size: 1, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene)
+                cubeplat[i].position = boxes[i]
+                cubeplat[i].material = getTextMateral(document.getElementById('plat' + i).value, font, scene)
+                cubeplat[i].actionManager = new BABYLON.ActionManager(scene);
+                cubeplat[i].actionManager.registerAction(
+                    exp1113()
+                )
+            }
+            cubeplat[2].parent = cubeplat[1]
+            cubeplat[3].parent = cubeplat[1]
+            cubeplat[4].parent = cubeplat[1]
+            cubeplat[0].parent = cubeplat[4]
+            cubeplat[5].parent = cubeplat[0]
+        }
+        function exp33() {
+            return new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickUpTrigger,
+                function () {
+                    if (animation.length > 0) return;
+
+                    if (explode == 1) {
+                        explode = 0
+                        animation.push(new asm(2, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(0, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(4, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, 90, 1))
+                        animation.push(new asm(3, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, 90, 1))
+                        animation.push(new asm(5, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, 90, 1))
+                    } else {
+                        explode = 1
+                        animation.push(new asm(5, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(3, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(4, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, -90, -1))
+                        animation.push(new asm(0, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, 90, 1))
+                        animation.push(new asm(2, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, 90, 1))
+                    }
+
+                })
+        }
+        function cube33(scene) {
+            let boxes = [new BABYLON.Vector3(1, 0, 0), new BABYLON.Vector3(0, 0, -0.5),
+            new BABYLON.Vector3(1, 0, 0), new BABYLON.Vector3(-1, 0, 0),
+            new BABYLON.Vector3(0, 1, 0), new BABYLON.Vector3(-1, 0, 0),]
+            let font = '140px fantasy'
+
+            for (let i = 0; i < 6; i++) {
+                cubeplat[i] = BABYLON.MeshBuilder.CreatePlane('plat' + i, { size: 1, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene)
+                cubeplat[i].position = boxes[i]
+                cubeplat[i].material = getTextMateral(document.getElementById('plat' + i).value, font, scene)
+                cubeplat[i].actionManager = new BABYLON.ActionManager(scene);
+                cubeplat[i].actionManager.registerAction(
+                    exp33()
+                )
+            }
+            cubeplat[2].parent = cubeplat[1]
+            cubeplat[0].parent = cubeplat[2]
+            cubeplat[4].parent = cubeplat[1]
+            cubeplat[3].parent = cubeplat[4]
+            cubeplat[5].parent = cubeplat[3]
+        }
+        function exp141() {
+            return new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickUpTrigger,
+                function () {
+                    if (animation.length > 0) return;
+
+                    if (explode == 1) {
+                        explode = 0
+                        animation.push(new asm(2, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(0, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(3, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, 90, 1))
+                        animation.push(new asm(4, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, 90, 1))
+                        animation.push(new asm(5, new BABYLON.Vector3(0, 0.5, 0), 'x', 0, -90, -1))
+                    } else {
+                        explode = 1
+                        animation.push(new asm(5, new BABYLON.Vector3(0, 0.5, 0), 'x', 0, 90, 1))
+                        animation.push(new asm(4, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, -90, -1))
+                        animation.push(new asm(3, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(0, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, 90, 1))
+                        animation.push(new asm(2, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, 90, 1))
+                    }
+
+                })
+        }
+        function cube141(scene) {
+            let boxes = [new BABYLON.Vector3(1, 0, 0), new BABYLON.Vector3(0, 0, -0.5),
+            new BABYLON.Vector3(1, 0, -0.5), new BABYLON.Vector3(-1, 0, -0.5),
+            new BABYLON.Vector3(0, 1, -0.5), new BABYLON.Vector3(0, -1, -0.5),]
+            let font = '140px fantasy'
+
+            for (let i = 0; i < 6; i++) {
+                cubeplat[i]=BABYLON.MeshBuilder.CreatePlane('plat' + i,{ size: 1, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene)
+                cubeplat[i].position = boxes[i]
+                cubeplat[i].material = getTextMateral(i, font, scene)
+                cubeplat[i].actionManager = new BABYLON.ActionManager(scene);
+                cubeplat[i].actionManager.registerAction(
+                    exp141()
+                )
+            }
+            cubeplat[0].parent = cubeplat[2]
+        }
+        function exp231() {
+            return new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickUpTrigger,
+                function () {
+                    if (animation.length > 0) return;
+
+                    if (explode == 1) {
+                        explode = 0
+                        animation.push(new asm(2, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(5, new BABYLON.Vector3(0, 0.5, 0), 'x', 0, -90, -1))
+                        animation.push(new asm(0, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(4, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, 90, 1))
+                        animation.push(new asm(3, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, 90, 1))
+                    } else {
+                        explode = 1
+                        animation.push(new asm(3, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(4, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, -90, -1))
+                        animation.push(new asm(0, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, 90, 1))
+                        animation.push(new asm(5, new BABYLON.Vector3(0, 0.5, 0), 'x', 0, 90, 1))
+                        animation.push(new asm(2, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, 90, 1))
+                    }
+
+                })
+        }
+        function cube231(scene) {
+            let boxes = [new BABYLON.Vector3(1, 0, 0), new BABYLON.Vector3(0, 0, -0.5),
+            new BABYLON.Vector3(1, 0,0), new BABYLON.Vector3(-1, 0, 0),
+            new BABYLON.Vector3(0, 1, 0), new BABYLON.Vector3(0, -1, 0),]
+            let font = '140px fantasy'
+
+            for (let i = 0; i < 6; i++) {
+                cubeplat[i] = BABYLON.MeshBuilder.CreatePlane('plat' + i, { size: 1, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene)
+                cubeplat[i].position = boxes[i]
+                cubeplat[i].material = getTextMateral(document.getElementById('plat' + i).value, font, scene)
+                cubeplat[i].actionManager = new BABYLON.ActionManager(scene);
+                cubeplat[i].actionManager.registerAction(
+                    exp231()
+                )
+            }
+            cubeplat[2].parent = cubeplat[1]
+            cubeplat[3].parent = cubeplat[4]
+            cubeplat[0].parent = cubeplat[2]
+            cubeplat[4].parent = cubeplat[1]
+            cubeplat[5].parent = cubeplat[2]
+        }
+        function exp222() {
+            return new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickUpTrigger,
+                function () {
+                    if (animation.length > 0) return;
+
+                    if (explode == 1) {
+                        explode = 0
+                        animation.push(new asm(2, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(5, new BABYLON.Vector3(0, 0.5, 0), 'x', 0, -90, -1))
+                        animation.push(new asm(0, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(4, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, 90, 1))
+                        animation.push(new asm(3, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, 90, 1))
+                    } else {
+                        explode = 1
+                        animation.push(new asm(3, new BABYLON.Vector3(0.5, 0, 0), 'y', 0, -90, -1))
+                        animation.push(new asm(4, new BABYLON.Vector3(0, -0.5, 0), 'x', 0, -90, -1))
+                        animation.push(new asm(0, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, 90, 1))
+                        animation.push(new asm(5, new BABYLON.Vector3(0, 0.5, 0), 'x', 0, 90, 1))
+                        animation.push(new asm(2, new BABYLON.Vector3(-0.5, 0, 0), 'y', 0, 90, 1))
+                    }
+
+                })
+        }
+        function cube222(scene) {
+            let boxes = [new BABYLON.Vector3(1, 0, 0), new BABYLON.Vector3(0, 0, -0.5),
+            new BABYLON.Vector3(1, 0, -0.5), new BABYLON.Vector3(-1, 0, 0),
+            new BABYLON.Vector3(0, 1, 0), new BABYLON.Vector3(0, -1, 0),]
+            let font = '140px fantasy'
+
+            for (let i = 0; i < 6; i++) {
+                cubeplat[i] = BABYLON.MeshBuilder.CreatePlane('plat' + i, { size: 1, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene)
+                cubeplat[i].position = boxes[i]
+                cubeplat[i].material = getTextMateral(document.getElementById('plat' + i).value, font, scene)
+                cubeplat[i].actionManager = new BABYLON.ActionManager(scene);
+                cubeplat[i].actionManager.registerAction(
+                    exp231()
+                )
+            }
+            cubeplat[5].parent = cubeplat[2]
+            cubeplat[0].parent = cubeplat[5]
+            cubeplat[4].parent = cubeplat[1]
+            cubeplat[3].parent = cubeplat[4]
+        }
+        function changechr() {
+            let font = '140px fantasy'
+            for (let i = 0; i < 6; i++) {
+                let chr = document.getElementById('plat' + i).value || ''
+                cubeplat[i].material = getTextMateral(chr, font, scene)
+                console.log(chr)
+            }
+        }
+        function getTextMateral(f, font, scene) {
+            let dynamicText = new BABYLON.DynamicTexture('dynamictext',
+                { width: 512, height: 256 }, scene);
+            let tempmat = new BABYLON.StandardMaterial('tempmat', scene)
+            tempmat.diffuseTexture = dynamicText;
+            let chr = (f != null && f != undefined) ? f : ''
+            dynamicText.drawText(chr, 200, 180, font, 'steelblue', 'white', true, true);
+            return tempmat
+        }
+        
+        var showAxis = function (size, scene) {
+            var makeTextPlane = function (text, color, size) {
+                var dynamicTexture = new BABYLON.DynamicTexture("DynamicTexture", 50, scene, true);
+                dynamicTexture.hasAlpha = true;
+                dynamicTexture.drawText(text, 5, 40, "bold 36px Arial", color, "transparent", true);
+                var plane = BABYLON.Mesh.CreatePlane("TextPlane", size, scene, true);
+                plane.material = new BABYLON.StandardMaterial("TextPlaneMaterial", scene);
+                plane.material.backFaceCulling = false;
+                plane.material.specularColor = new BABYLON.Color3(0, 0, 0);
+                plane.material.diffuseTexture = dynamicTexture;
+                return plane;
+            };
+
+            var axisX = BABYLON.Mesh.CreateLines("axisX", [
+                new BABYLON.Vector3(0, 0, 0), new BABYLON.Vector3(size, 0, 0), new BABYLON.Vector3(size * 0.95, 0.05 * size, 0),
+                new BABYLON.Vector3(size, 0, 0), new BABYLON.Vector3(size * 0.95, -0.05 * size, 0)
+            ], scene);
+            axisX.color = new BABYLON.Color3(1, 0, 0);
+            var xChar = makeTextPlane("右", "red", size / 10);
+            xChar.position = new BABYLON.Vector3(0.9 * size, -0.05 * size, 0);
+            var axisY = BABYLON.Mesh.CreateLines("axisY", [
+                new BABYLON.Vector3(0, 0, 0), new BABYLON.Vector3(0, size, 0), new BABYLON.Vector3(-0.05 * size, size * 0.95, 0),
+                new BABYLON.Vector3(0, size, 0), new BABYLON.Vector3(0.05 * size, size * 0.95, 0)
+            ], scene);
+            axisY.color = new BABYLON.Color3(0, 1, 0);
+            var yChar = makeTextPlane("上", "green", size / 10);
+            yChar.position = new BABYLON.Vector3(0, 0.9 * size, -0.05 * size);
+            var axisZ = BABYLON.Mesh.CreateLines("axisZ", [
+                new BABYLON.Vector3(0, 0, 0), new BABYLON.Vector3(0, 0, size), new BABYLON.Vector3(0, -0.05 * size, size * 0.95),
+                new BABYLON.Vector3(0, 0, size), new BABYLON.Vector3(0, 0.05 * size, size * 0.95)
+            ], scene);
+            axisZ.color = new BABYLON.Color3(0, 0, 1);
+            var zChar = makeTextPlane("前", "blue", size / 10);
+            zChar.position = new BABYLON.Vector3(0, 0.05 * size, 0.9 * size);
+        };
+        window.initFunction = async function () {
+
+
+            var asyncEngineCreation = async function () {
+                try {
+                    return createDefaultEngine();
+                } catch (e) {
+                    console.log("the available createEngine function failed. Creating the default engine instead");
+                    return createDefaultEngine();
+                }
+            }
+
+            window.engine = await asyncEngineCreation();
+            if (!engine) throw 'engine should not be null.';
+            startRenderLoop(engine, canvas);
+            window.scene = createScene();
+        };
+        initFunction().then(() => {
+            sceneToRender = scene
+        });
+
+        // Resize
+        window.addEventListener("resize", function () {
+            engine.resize();
+        });
+    </script>
+</body>
+</html>
