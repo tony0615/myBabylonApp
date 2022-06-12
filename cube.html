@@ -28,6 +28,7 @@
             height: 100%;
             margin: 0;
             padding: 0;
+            font-size:17px;
         }
 
         #renderCanvas {
@@ -39,10 +40,13 @@
         .chrinput {
             width: 30px;
         }
+        tr,td{
+            padding:0.1rem;
+        }
     </style>
 </head>
 <body>
-    <div style="position: absolute; z-index: 100;left:0px; top: 0px; background:#fff">
+    <div style="position: absolute; z-index: 100;left:0px; top: 0px;padding:0.3rem; background:#fff">
         <table>
             <tr><td>上：<input type="text" class="chrinput" id="plat4" value="上" /></td><td>下：<input type="text" class="chrinput" id="plat5" value="下" /></td></tr>
             <tr><td>左：<input type="text" class="chrinput" id="plat3" value="左" /></td><td>右：<input type="text" class="chrinput" id="plat2" value="右" /></td></tr>
